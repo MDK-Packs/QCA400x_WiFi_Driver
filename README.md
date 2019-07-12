@@ -18,6 +18,7 @@ in your development environment.
 
 | Repository                  | Description                                               |                
 |:--------------------------- |:--------------------------------------------------------- |
+| [QCA400x_Host_Driver_SDK](https://github.com/MDK-Packs/QCA400x_Host_Driver_SDK)    |  QCA400x host driver SDK  |
 | [cmsis-pack-eclipse](https://github.com/ARM-software/cmsis-pack-eclipse)    |  CMSIS-Pack Management for Eclipse reference implementation Pack support  |
 | [CMSIS-Driver](https://github.com/arm-software/CMSIS-Driver)                | Generic MCU driver implementations and templates for Ethernet MAC/PHY and Flash.  |
 | [CMSIS-Driver_Validation](https://github.com/ARM-software/CMSIS-Driver_Validation) | CMSIS-Driver Validation can be used to verify CMSIS-Driver in a user system |
