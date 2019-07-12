@@ -25,7 +25,7 @@ in your development environment.
 | [mdk-packs](https://github.com/mdk-packs)                                   | IoT cloud connectors as trail implementations for MDK (help us to make it generic)|
  
 ## License
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](License.txt)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE.txt)
 
 ## Contributions and Pull Requests
 Contributions are accepted under [Apache-2.0](License.txt). Only submit contributions where you have authored all of the code.
