@@ -7,6 +7,14 @@
   <url>https://github.com/MDK-Packs/Pack/raw/master/QCA400x_WiFi_Driver/</url>
   <license>LICENSE.txt</license>
   <releases>
+    <release version="1.0.1-dev0">
+      - Updated Driver:
+      -- Removed send_timeout variable (socket send timeout can not be configured)
+      -- Reduced default socket receive timeout to 20s
+      -- Updated WiFi_GetNetInfo function to return WiFi security type (security type is save in WiFi_Activate)
+      -- Write to socket_arr[].handle variable is protected with a semaphore
+      -- Socket functions: Added additional safety checking of parameters and driver variables
+    </release>
     <release version="1.0.0" date="2019-06-27">
       Initial release
     </release>
@@ -26,7 +34,7 @@
     </condition>
   </conditions>
   <components>
-    <component Cclass="CMSIS Driver" Cgroup="WiFi" Csub="QCA400x" Capiversion="1.0.0" Cversion="1.0.0" condition="QCA400x WiFi Driver">
+    <component Cclass="CMSIS Driver" Cgroup="WiFi" Csub="QCA400x" Capiversion="1.0.0" Cversion="1.0.1-dev0" condition="QCA400x WiFi Driver">
       <description>WiFi Qualcomm QCA400x Driver</description>
       <RTE_Components_h>
         <!-- the following content goes into file 'RTE_Components.h' -->
