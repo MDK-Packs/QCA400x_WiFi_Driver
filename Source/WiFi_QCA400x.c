@@ -49,6 +49,7 @@
  *  - Socket functionality:
  *  -- Corrected Socket Accept
  *  -- Corrected Socket GetHostByName: returned correct ip address length
+ *  -- Updated Socket Close: Cleared whole socket_t structure
  *  Version 1.1
  *  - Removed send_timeout variable (socket send timeout can not be configured)
  *  - Reduced default socket receive timeout to 20s
@@ -2532,7 +2533,7 @@ static int32_t WiFi_SocketClose (int32_t socket) {
   }
 
   qcom_socket_close(socket_arr[socket].handle);
-  socket_arr[socket].handle = 0;
+  memset (&socket_arr[socket], 0, sizeof(socket_t));
 
   return ret;
 }
