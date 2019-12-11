@@ -16,8 +16,8 @@
  * limitations under the License.
  *
  *
- * $Date:        29. November 2019
- * $Revision:    V1.1
+ * $Date:        11. December 2019
+ * $Revision:    V1.2
  *
  * Driver:       Driver_WiFin (n = WIFI_QCA400x_DRV_NUM value)
  * Project:      WiFi Driver for 
@@ -45,6 +45,9 @@
  * -------------------------------------------------------------------------- */
 
 /* History:
+ *  Version 1.2
+ *  - Socket functionality:
+ *  -- Corrected Socket Accept
  *  Version 1.1
  *  - Removed send_timeout variable (socket send timeout can not be configured)
  *  - Reduced default socket receive timeout to 20s
@@ -74,7 +77,7 @@
 
 // WiFi Driver *****************************************************************
 
-#define ARM_WIFI_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(1,1)        // Driver version
+#define ARM_WIFI_DRV_VERSION ARM_DRIVER_VERSION_MAJOR_MINOR(1,2)        // Driver version
 
 // Driver Version
 static const ARM_DRIVER_VERSION driver_version = { ARM_WIFI_API_VERSION, ARM_WIFI_DRV_VERSION };
@@ -1823,9 +1826,8 @@ static int32_t WiFi_SocketListen (int32_t socket, int32_t backlog) {
                    - ARM_SOCKET_ERROR             : Unspecified error
 */
 static int32_t WiFi_SocketAccept (int32_t socket, uint8_t *ip, uint32_t *ip_len, uint16_t *port) {
-  int32_t        ret, i, handle;
-  int32_t        addr_len;
-  uint32_t       timeout;
+  int32_t        ret, i, handle, sockaddr_len;
+  uint32_t       timeout, len;
   union {
     SOCKADDR_T   addr;
     SOCKADDR_6_T addr6;
@@ -1833,6 +1835,9 @@ static int32_t WiFi_SocketAccept (int32_t socket, uint8_t *ip, uint32_t *ip_len,
 
   if ((socket < 0) || (socket >= MAX_SOCKETS_SUPPORTED) || (socket_arr[socket].handle == 0)) {
     return ARM_SOCKET_ESOCK;
+  }
+  if (socket_arr[socket].type == ARM_SOCKET_SOCK_DGRAM) {
+    return ARM_SOCKET_ENOTSUP;
   }
   if (((ip != NULL) && (ip_len == NULL)) || ((ip_len != NULL) && (*ip_len < socket_arr[socket].ip_len))) {
     return ARM_SOCKET_EINVAL;
@@ -1864,9 +1869,14 @@ static int32_t WiFi_SocketAccept (int32_t socket, uint8_t *ip, uint32_t *ip_len,
       timeout = 20000U;
     }
 
-    if ((A_STATUS)t_select(Custom_Api_GetDriverCxt(0), socket_arr[socket].handle, timeout) == A_OK) {
-      handle = qcom_accept(socket_arr[socket].handle, (struct sockaddr *)&addr, &addr_len);
+    if (t_select(Custom_Api_GetDriverCxt(0), (uint32_t)socket_arr[socket].handle, timeout) == 0) {
+      handle = qcom_accept(socket_arr[socket].handle, (struct sockaddr *)(int32_t)&addr, &sockaddr_len);
       if (handle != 0) {
+        if (sockaddr_len == sizeof(SOCKADDR_T)) {
+          len = 4;
+        } else {
+          len = 16;
+        }
 
         socket_arr[i].handle       = handle;
         socket_arr[i].type         = socket_arr[socket].type;
@@ -1875,15 +1885,15 @@ static int32_t WiFi_SocketAccept (int32_t socket, uint8_t *ip, uint32_t *ip_len,
         socket_arr[i].recv_timeout = socket_arr[socket].recv_timeout;
         socket_arr[i].local_port   = socket_arr[socket].local_port;
         socket_arr[i].remote_port  = addr.addr.sin_port;
-        memcpy((void *)socket_arr[i].remote_ip, (void *)ip, addr_len);
-        memcpy((void *)socket_arr[i].remote_ip, (void *)&addr.addr.sin_addr, addr_len);
-        if ((ip != NULL) && (ip_len != NULL) && (*ip_len >= addr_len)) {
-          if (addr_len == 4) {
+        memcpy((void *)socket_arr[i].local_ip, (void *)socket_arr[socket].local_ip, socket_arr[socket].ip_len);
+        if ((ip != NULL) && (ip_len != NULL) && (*ip_len >= len)) {
+          memcpy((void *)socket_arr[i].remote_ip, (void *)&addr.addr.sin_addr, len);
+          if (len == 4) {
             __UNALIGNED_UINT32_WRITE(ip, A_CPU2BE32(addr.addr.sin_addr));
           } else {
             memcpy((void *)ip, (void *)&addr.addr6.sin6_addr, 16);
           }
-          *ip_len = addr_len;
+          *ip_len = len;
         }
         if (port != NULL) {
           *port = addr.addr.sin_port;
