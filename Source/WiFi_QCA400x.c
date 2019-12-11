@@ -48,6 +48,7 @@
  *  Version 1.2
  *  - Socket functionality:
  *  -- Corrected Socket Accept
+ *  -- Corrected Socket GetHostByName: returned correct ip address length
  *  Version 1.1
  *  - Removed send_timeout variable (socket send timeout can not be configured)
  *  - Reduced default socket receive timeout to 20s
@@ -2584,6 +2585,7 @@ static int32_t WiFi_SocketGetHostByName (const char *name, int32_t af, uint8_t *
 
   dns_ip.sin_addr = A_CPU2BE32(dns_servers[0]);
   if (qcom_dns_resolver(dns_ip, (char *)name, &ip_addr, WIFI_QCA400x_DNS_RESOLVE_TIMEOUT) == A_OK) {
+    *ip_len = 4U;
     __UNALIGNED_UINT32_WRITE(ip, ip_addr.sin_addr);
   } else {
     ret = ARM_SOCKET_ERROR;
