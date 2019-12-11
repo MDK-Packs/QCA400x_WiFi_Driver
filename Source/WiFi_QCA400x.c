@@ -50,6 +50,7 @@
  *  -- Corrected Socket Accept
  *  -- Corrected Socket GetHostByName: Returned correct ip address length
  *  -- Corrected Socket SocketSendTo: Corrected transfers greater than WIFI_QCA400x_MAX_PACKET_LEN
+ *  -- Updated Socket RecvFrom: Handled situation when socket was cloased by a peer
  *  -- Updated Socket Close: Cleared whole socket_t structure
  *  Version 1.1
  *  - Removed send_timeout variable (socket send timeout can not be configured)
@@ -2080,7 +2081,8 @@ static int32_t WiFi_SocketRecvFrom (int32_t socket, void *buf, uint32_t len, uin
   len_to_recv = (int32_t)len;
   len_recv    = 0;
   do {
-    if ((A_STATUS)t_select(Custom_Api_GetDriverCxt(0), socket_arr[socket].handle, timeout) == A_OK) {
+    ret = t_select(Custom_Api_GetDriverCxt(0), (uint32_t)socket_arr[socket].handle, timeout);
+    if ((A_STATUS)ret == A_OK) {
       rx_buf = NULL;
       if (ip != NULL) {
         ret  = qcom_recvfrom(socket_arr[socket].handle, &rx_buf, len_to_recv - len_recv, 0, (struct sockaddr *)&from_addr, &from_addr_len);
@@ -2123,6 +2125,12 @@ static int32_t WiFi_SocketRecvFrom (int32_t socket, void *buf, uint32_t len, uin
         break;
       }
     } else {
+      if (ret == A_SOCK_INVALID) {
+        ret = ARM_SOCKET_ERROR;
+      } else {
+        // If timed out in blocking mode or no data available in non-blocking mode
+        ret = ARM_SOCKET_EAGAIN;
+      }
       // If timeout
       break;
     }
@@ -2130,9 +2138,6 @@ static int32_t WiFi_SocketRecvFrom (int32_t socket, void *buf, uint32_t len, uin
 
   if (ret > 0) {
     ret = len_recv;
-  } else if (ret == 0) {
-    // If timed out in blocking mode or no data available in non-blocking mode
-    ret = ARM_SOCKET_EAGAIN;
   }
 
   return ret;
