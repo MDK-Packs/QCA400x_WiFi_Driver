@@ -48,7 +48,8 @@
  *  Version 1.2
  *  - Socket functionality:
  *  -- Corrected Socket Accept
- *  -- Corrected Socket GetHostByName: returned correct ip address length
+ *  -- Corrected Socket GetHostByName: Returned correct ip address length
+ *  -- Corrected Socket SocketSendTo: Corrected transfers greater than WIFI_QCA400x_MAX_PACKET_LEN
  *  -- Updated Socket Close: Cleared whole socket_t structure
  *  Version 1.1
  *  - Removed send_timeout variable (socket send timeout can not be configured)
@@ -2206,7 +2207,8 @@ static int32_t WiFi_SocketSend (int32_t socket, const void *buf, uint32_t len) {
                    - ARM_SOCKET_ERROR             : Unspecified error
 */
 static int32_t WiFi_SocketSendTo (int32_t socket, const void *buf, uint32_t len, const uint8_t *ip, uint32_t ip_len, uint16_t port) {
-  int32_t        ret, to_addr_len, len_sent, len_to_send, len_curr;
+  int32_t        ret, to_addr_len = 0;
+  uint32_t       len_curr, len_sent, len_to_send;
   char          *tx_buf;
   union {
     SOCKADDR_T   addr;
@@ -2253,7 +2255,7 @@ static int32_t WiFi_SocketSendTo (int32_t socket, const void *buf, uint32_t len,
     }
   }
 
-  len_to_send = (int32_t)len;
+  len_to_send = len;
   len_sent    = 0U;
   if (tx_buf != NULL) {
     do {
@@ -2263,9 +2265,9 @@ static int32_t WiFi_SocketSendTo (int32_t socket, const void *buf, uint32_t len,
       }
       memcpy((void *)tx_buf, (const void *)((const char *)buf + len_sent), len_curr);
       if (ip != NULL) {
-        ret = qcom_sendto(socket_arr[socket].handle, tx_buf, (int32_t)len, 0, (struct sockaddr *)&to_addr, to_addr_len);
+        ret = qcom_sendto(socket_arr[socket].handle, tx_buf, (int32_t)len_curr, 0, (struct sockaddr *)(int32_t)&to_addr, to_addr_len);
       } else {
-        ret = qcom_send  (socket_arr[socket].handle, tx_buf, (int32_t)len_to_send, 0);
+        ret = qcom_send  (socket_arr[socket].handle, tx_buf, (int32_t)len_curr, 0);
       }
       if (ret > 0) {
         len_sent += ret;
