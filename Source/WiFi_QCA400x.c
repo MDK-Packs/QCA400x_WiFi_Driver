@@ -46,11 +46,12 @@
 
 /* History:
  *  Version 1.2
+ *  - Corrected ARM Compiler 6 warnings
  *  - Socket functionality:
  *  -- Corrected Socket Accept
  *  -- Corrected Socket GetHostByName: Returned correct ip address length
  *  -- Corrected Socket SocketSendTo: Corrected transfers greater than WIFI_QCA400x_MAX_PACKET_LEN
- *  -- Updated Socket RecvFrom: Handled situation when socket was cloased by a peer
+ *  -- Updated Socket RecvFrom: Handled situation when socket was closed by a peer
  *  -- Updated Socket Close: Cleared whole socket_t structure
  *  Version 1.1
  *  - Removed send_timeout variable (socket send timeout can not be configured)
@@ -141,6 +142,8 @@ static uint8_t                          scan_buf[WIFI_QCA400x_SCAN_BUF_LEN] __AL
 
 static uint32_t                         sta_lp_time;
 
+static uint8_t                          security;
+
 #if (WIFI_QCA400x_MODE_INT_STACK)       // If Internal Network Stack mode is compile-time selected
 static osSemaphoreId_t                  sockets_semaphore;
 static uint8_t                          sta_dhcp_client;
@@ -152,7 +155,6 @@ static uint32_t                         ip_dns1;
 static uint32_t                         ip_dns2;
 static uint8_t                          ip6_dns1[16] __ALIGNED(4);
 static uint8_t                          ip6_dns2[16] __ALIGNED(4);
-static uint8_t                          security;
 
 static socket_t                         socket_arr[MAX_SOCKETS_SUPPORTED];
 #endif
@@ -346,6 +348,7 @@ static int32_t WiFi_Initialize (ARM_WIFI_SignalEvent_t cb_event) {
 #if (WIFI_QCA400x_MODE_PASSTHROUGH)     // If Bypass or Pass-through mode is compile-time selected
   signal_event_fn = cb_event;           // Update pointer to callback function
 #else
+  (void) cb_event;
   sockets_semaphore = osSemaphoreNew(1U, 1U, NULL);
   if (sockets_semaphore == NULL) {
     return ARM_DRIVER_ERROR;
@@ -456,6 +459,10 @@ static int32_t WiFi_PowerControl (ARM_POWER_STATE state) {
     return ARM_DRIVER_ERROR;
   }
 
+  if ((state != ARM_POWER_OFF) && (state != ARM_POWER_LOW) && (state != ARM_POWER_FULL)) {
+    return ARM_DRIVER_ERROR_PARAMETER;
+  }
+
   ret = ARM_DRIVER_OK;
 
   switch (state) {
@@ -492,10 +499,6 @@ static int32_t WiFi_PowerControl (ARM_POWER_STATE state) {
         }
       }
       break;
-
-    default:
-      ret = ARM_DRIVER_ERROR_PARAMETER;
-      break;
   }
 
   return ret;
@@ -515,6 +518,8 @@ static int32_t WiFi_PowerControl (ARM_POWER_STATE state) {
 static int32_t WiFi_GetModuleInfo (char *module_info, uint32_t max_len) {
   // QCOM API does not provide this information it could be implemented by editing 
   // Custom_Api_ReadyEvent function in the Qualcomm QCA400x Host Driver SDK
+  (void) module_info;
+  (void) max_len;
   return ARM_DRIVER_ERROR_UNSUPPORTED;
 }
 
@@ -549,7 +554,7 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
 
   switch (option) {
     case ARM_WIFI_TX_POWER:                 // Station/AP Set transmit power;                         data = &power,    len =  4, uint32_t: 0 .. 20 [dBm]
-      u32 = *((uint32_t *)data);
+      u32 = *((uint32_t *)(uint32_t)data);
       if ((u32 == 0U) || (u32 > 17U)) {
         ret = ARM_DRIVER_ERROR_PARAMETER;
       }
@@ -562,7 +567,7 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
 
     case ARM_WIFI_LP_TIMER:                 // Station    Set low-power deep-sleep time;              data = &time,     len =  4, uint32_t [seconds]: 0 = disable (default)
       if (interface == 0U) {
-        sta_lp_time = *((uint32_t *)data);
+        sta_lp_time = *((uint32_t *)(uint32_t)data);
       } else {
         // Not supported for AP interface
         ret = ARM_DRIVER_ERROR_UNSUPPORTED;
@@ -571,7 +576,7 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
 
     case ARM_WIFI_DTIM:                     // Station/AP Set DTIM interval;                          data = &dtim,     len =  4, uint32_t [beacons]
       if (interface == 0U) {
-        u32 = *((uint32_t *)data);
+        u32 = *((uint32_t *)(uint32_t)data);
         if (qcom_sta_set_listen_time(0U, u32) != A_OK) {
           ret = ARM_DRIVER_ERROR;
         }
@@ -583,8 +588,8 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
 
     case ARM_WIFI_BEACON:                   //         AP Set beacon interval;                        data = &interval, len =  4, uint32_t [ms]
       if (interface == 1U) {
-        u32 = *((uint32_t *)data);
-        if (qcom_ap_set_beacon_interval(0U, u32) != A_OK) {
+        u32 = *((uint32_t *)(uint32_t)data);
+        if (qcom_ap_set_beacon_interval(0U, u32 & 0xFFFFU) != A_OK) {
           ret = ARM_DRIVER_ERROR;
         }
       } else {
@@ -620,8 +625,8 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
           if (sta_dhcp_client != 0U) {
             mode = IPCFG_DHCP;
           }
-          u32 = A_CPU2BE32(*((uint32_t *)data));
-          if (qcom_ipconfig(0U, mode, &u32_arr[0], &u32, &u32_arr[2]) == A_OK) {
+          u32 = A_CPU2BE32(*((uint32_t *)(uint32_t)data));
+          if (qcom_ipconfig(0U, (int32_t)mode, &u32_arr[0], &u32, &u32_arr[2]) == A_OK) {
             sta_dhcp_client = 0U;
           } else {
             ret = ARM_DRIVER_ERROR;
@@ -643,8 +648,8 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
           if (sta_dhcp_client != 0U) {
             mode = IPCFG_DHCP;
           }
-          u32 = A_CPU2BE32(*((uint32_t *)data));
-          if (qcom_ipconfig(0U, mode, &u32_arr[0], &u32_arr[1], &u32) == A_OK) {
+          u32 = A_CPU2BE32(*((uint32_t *)(uint32_t)data));
+          if (qcom_ipconfig(0U, (int32_t)mode, &u32_arr[0], &u32_arr[1], &u32) == A_OK) {
             sta_dhcp_client = 0U;
           } else {
             ret = ARM_DRIVER_ERROR;
@@ -661,7 +666,7 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
     case ARM_WIFI_IP_DNS1:                  // Station/AP Set IPv4 primary   DNS address;             data = &ip,       len =  4, uint8_t[4]
       if (interface == 0U) {
         qcom_dnsc_del_server_address((uint8_t *)&ip_dns1, ATH_AF_INET);   // Remove previous DNS1 address
-        if ((qcom_dnsc_add_server_address((uint8_t *)data, ATH_AF_INET) == A_OK) && 
+        if ((qcom_dnsc_add_server_address((uint8_t *)(uint32_t)data, ATH_AF_INET) == A_OK) && 
             (qcom_dnsc_enable(1) == A_OK)) {
           ip_dns1 = __UNALIGNED_UINT32_READ(data);
         } else {
@@ -676,7 +681,7 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
     case ARM_WIFI_IP_DNS2:                  // Station/AP Set IPv4 secondary DNS address;             data = &ip,       len =  4, uint8_t[4]
       if (interface == 0U) {
         qcom_dnsc_del_server_address((uint8_t *)&ip_dns2, ATH_AF_INET);   // Remove previous DNS1 address
-        if ((qcom_dnsc_add_server_address((uint8_t *)data, ATH_AF_INET) == A_OK) && 
+        if ((qcom_dnsc_add_server_address((uint8_t *)(uint32_t)data, ATH_AF_INET) == A_OK) && 
             (qcom_dnsc_enable(1) == A_OK)) {
           ip_dns2 = __UNALIGNED_UINT32_READ(data);
         } else {
@@ -689,7 +694,7 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
       break;
 
     case ARM_WIFI_IP_DHCP:                  // Station/AP Set IPv4 DHCP client/server enable/disable; data = &dhcp,     len =  4, uint32_t: 0 = disable, non-zero = enable (default)
-      u32 = *((uint32_t *)data);
+      u32 = *((uint32_t *)(uint32_t)data);
       if (interface == 0U) {
         if (u32 != 0U) {
           if (oper_mode == OPER_MODE_STATION) {
@@ -709,7 +714,7 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
         }
       } else {  // For AP interface
         if (u32 != 0U) {
-          if (qcom_dhcps_set_pool(0U, ap_dhcp_ip_begin, ap_dhcp_ip_end, ap_dhcp_lease_time) == A_OK) {
+          if (qcom_dhcps_set_pool(0U, ap_dhcp_ip_begin, ap_dhcp_ip_end, (int32_t)ap_dhcp_lease_time) == A_OK) {
             ap_dhcp_server = 1U;
           } else {
             ret = ARM_DRIVER_ERROR;
@@ -727,7 +732,7 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
     case ARM_WIFI_IP_DHCP_POOL_BEGIN:       //         AP Set IPv4 DHCP pool begin address;           data = &ip,       len =  4, uint8_t[4]
       if (interface == 1U) {
         u32 = A_CPU2BE32(__UNALIGNED_UINT32_READ(data));
-        if (qcom_dhcps_set_pool(0U, u32, ap_dhcp_ip_end, ap_dhcp_lease_time) == A_OK) {
+        if (qcom_dhcps_set_pool(0U, u32, ap_dhcp_ip_end, (int32_t)ap_dhcp_lease_time) == A_OK) {
           ap_dhcp_ip_begin = u32;
         } else {
           ret = ARM_DRIVER_ERROR;
@@ -741,7 +746,7 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
     case ARM_WIFI_IP_DHCP_POOL_END:         //         AP Set IPv4 DHCP pool end address;             data = &ip,       len =  4, uint8_t[4]
       if (interface == 1U) {
         u32 = A_CPU2BE32(__UNALIGNED_UINT32_READ(data));
-        if (qcom_dhcps_set_pool(0U, ap_dhcp_ip_begin, u32, ap_dhcp_lease_time) == A_OK) {
+        if (qcom_dhcps_set_pool(0U, ap_dhcp_ip_begin, u32, (int32_t)ap_dhcp_lease_time) == A_OK) {
           ap_dhcp_ip_end = u32;
         } else {
           ret = ARM_DRIVER_ERROR;
@@ -755,7 +760,7 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
     case ARM_WIFI_IP_DHCP_LEASE_TIME:       //         AP Set IPv4 DHCP lease time;                   data = &time,     len =  4, uint32_t [seconds]
       if (interface == 1U) {
         u32 = A_CPU2BE32(__UNALIGNED_UINT32_READ(data));
-        if (qcom_dhcps_set_pool(0U, ap_dhcp_ip_begin, ap_dhcp_ip_end, u32) == A_OK) {
+        if (qcom_dhcps_set_pool(0U, ap_dhcp_ip_begin, ap_dhcp_ip_end, (int32_t)u32) == A_OK) {
           ap_dhcp_lease_time = u32;
         } else {
           ret = ARM_DRIVER_ERROR_PARAMETER;
@@ -769,9 +774,9 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
     case ARM_WIFI_IP6_DNS1:                 // Station/AP Set IPv6 primary   DNS address;             data = &ip6,      len = 16, uint8_t[16]
       if (len >= 16U) {
         qcom_dnsc_del_server_address((uint8_t *)&ip6_dns1, ATH_AF_INET6);       // Remove previous DNS1 address
-        if ((qcom_dnsc_add_server_address((uint8_t *)data, ATH_AF_INET6) == A_OK) && 
+        if ((qcom_dnsc_add_server_address((uint8_t *)(uint32_t)data, ATH_AF_INET6) == A_OK) && 
             (qcom_dnsc_enable(1) == A_OK)) {
-          memcpy((void *)ip6_dns1, (void *)data, sizeof(ip6_dns1));
+          memcpy((void *)ip6_dns1, (void *)(uint32_t)data, sizeof(ip6_dns1));
         } else {
           ret = ARM_DRIVER_ERROR;
         }
@@ -783,9 +788,9 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
     case ARM_WIFI_IP6_DNS2:                 // Station/AP Set IPv6 secondary DNS address;             data = &ip6,      len = 16, uint8_t[16]
       if (len >= 16U) {
         qcom_dnsc_del_server_address((uint8_t *)&ip6_dns2, ATH_AF_INET6);       // Remove previous DNS1 address
-        if ((qcom_dnsc_add_server_address((uint8_t *)data, ATH_AF_INET6) == A_OK) && 
+        if ((qcom_dnsc_add_server_address((uint8_t *)(uint32_t)data, ATH_AF_INET6) == A_OK) && 
             (qcom_dnsc_enable(1) == A_OK)) {
-          memcpy((void *)ip6_dns2, (void *)data, sizeof(ip6_dns2));
+          memcpy((void *)ip6_dns2, (void *)(uint32_t)data, sizeof(ip6_dns2));
         } else {
           ret = ARM_DRIVER_ERROR;
         }
@@ -795,7 +800,7 @@ static int32_t WiFi_SetOption (uint32_t interface, uint32_t option, const void *
       break;
 
     case ARM_WIFI_IP6_DHCP_MODE:            // Station/AP Set IPv6 DHCPv6 client mode;                data = &mode,     len =  4, uint32_t: ARM_WIFI_IP6_DHCP_xxx (default Off)
-      u32 = *((uint32_t *)data);
+      u32 = *((uint32_t *)(uint32_t)data);
       switch (u32) {
         case ARM_WIFI_IP6_DHCP_STATEFULL:
           // Only available and supported mode
@@ -1052,11 +1057,11 @@ static int32_t WiFi_GetOption (uint32_t interface, uint32_t option, void *data, 
 */
 static int32_t WiFi_Scan (ARM_WIFI_SCAN_INFO_t scan_info[], uint32_t max_num) {
   int32_t                  ret;
-  int16_t                  i, num;
-  uint8_t                  security;
+  int16_t                  i = 0, num = 0;
+  uint8_t                  wifi_security;
   qcom_start_scan_params_t params;
   ARM_WIFI_SCAN_INFO_t    *ptr_scan_info;
-  QCOM_BSS_SCAN_INFO      *ptr_qcom_scan;
+  QCOM_BSS_SCAN_INFO      *ptr_qcom_scan = NULL;
 
   if ((scan_info == NULL) || (max_num == 0U)) {
     return ARM_DRIVER_ERROR_PARAMETER;
@@ -1084,10 +1089,13 @@ static int32_t WiFi_Scan (ARM_WIFI_SCAN_INFO_t scan_info[], uint32_t max_num) {
       ret = ARM_DRIVER_ERROR;
     }
   }
+  if (ptr_qcom_scan == NULL) {
+    ret = ARM_DRIVER_ERROR;
+  }
 
   if (ret == ARM_DRIVER_OK) {
     if (num > (int32_t)max_num) {
-      num = (int32_t)max_num;
+      num = (int16_t)max_num;
     }
 
     ptr_scan_info = (ARM_WIFI_SCAN_INFO_t *)scan_info;
@@ -1104,19 +1112,19 @@ static int32_t WiFi_Scan (ARM_WIFI_SCAN_INFO_t scan_info[], uint32_t max_num) {
 
       // Extract security
       if (ptr_qcom_scan->security_enabled == 0) {
-        security = ARM_WIFI_SECURITY_OPEN;
+        wifi_security = ARM_WIFI_SECURITY_OPEN;
       } else {
         if ((ptr_qcom_scan->rsn_cipher == 0U) && (ptr_qcom_scan->wpa_cipher == 0U)) {
-          security = ARM_WIFI_SECURITY_WEP;
+          wifi_security = ARM_WIFI_SECURITY_WEP;
         } else if (ptr_qcom_scan->rsn_cipher != 0U) {
-          security = ARM_WIFI_SECURITY_WPA2;
+          wifi_security = ARM_WIFI_SECURITY_WPA2;
         } else if (ptr_qcom_scan->wpa_cipher == 0U) {
-          security = ARM_WIFI_SECURITY_WPA;
+          wifi_security = ARM_WIFI_SECURITY_WPA;
         } else {
-          security = ARM_WIFI_SECURITY_UNKNOWN;
+          wifi_security = ARM_WIFI_SECURITY_UNKNOWN;
         }
       }
-      ptr_scan_info->security = security;
+      ptr_scan_info->security = wifi_security;
 
       // Extract channel
       ptr_scan_info->ch = ptr_qcom_scan->channel;
@@ -1151,8 +1159,8 @@ static int32_t WiFi_Scan (ARM_WIFI_SCAN_INFO_t scan_info[], uint32_t max_num) {
 static int32_t WiFi_Activate (uint32_t interface, const ARM_WIFI_CONFIG_t *config) {
   int32_t         ret;
   uint32_t        evt;
-  WLAN_CRYPT_TYPE crypt_type;
-  WLAN_AUTH_MODE  auth_mode;
+  WLAN_CRYPT_TYPE crypt_type = WLAN_CRYPT_NONE;
+  WLAN_AUTH_MODE  auth_mode  = WLAN_AUTH_NONE;
 #if (WIFI_QCA400x_MODE_INT_STACK)       // If Internal Network Stack mode is compile-time selected
   uint32_t        u32_arr[3];
 #endif
@@ -1231,7 +1239,7 @@ static int32_t WiFi_Activate (uint32_t interface, const ARM_WIFI_CONFIG_t *confi
         }
         break;
       case ARM_WIFI_WPS_METHOD_PIN:
-        if (qcom_wps_start(0U, 1, 0, (char *)config->wps_pin) != A_OK) {
+        if (qcom_wps_start(0U, 1, 0, (char *)(int32_t)config->wps_pin) != A_OK) {
           ret = ARM_DRIVER_ERROR;
         }
         break;
@@ -1241,7 +1249,7 @@ static int32_t WiFi_Activate (uint32_t interface, const ARM_WIFI_CONFIG_t *confi
     }
   } else {
     // Same procedure for Station and AP if WPS is not used for Station connection
-    if (qcom_set_connect_callback(0U, &ConnectCallback) != A_OK) {
+    if (qcom_set_connect_callback(0U, (void *)&ConnectCallback) != A_OK) {
       ret = ARM_DRIVER_ERROR;
     }
 
@@ -1252,7 +1260,7 @@ static int32_t WiFi_Activate (uint32_t interface, const ARM_WIFI_CONFIG_t *confi
     }
 
     if  (ret == ARM_DRIVER_OK) {
-      if (qcom_set_ssid(0U, (char *)config->ssid) != A_OK) {
+      if (qcom_set_ssid(0U, (char *)(int32_t)config->ssid) != A_OK) {
         ret = ARM_DRIVER_ERROR;
       }
     }
@@ -1293,7 +1301,7 @@ static int32_t WiFi_Activate (uint32_t interface, const ARM_WIFI_CONFIG_t *confi
     }
 
     if  (ret == ARM_DRIVER_OK) {
-      if (qcom_sec_set_passphrase(0U, (char *)config->pass) != A_OK) {
+      if (qcom_sec_set_passphrase(0U, (char *)(int32_t)config->pass) != A_OK) {
         ret = ARM_DRIVER_ERROR;
       }
     }
@@ -1379,7 +1387,7 @@ static int32_t WiFi_Deactivate (uint32_t interface) {
   ret = ARM_DRIVER_OK;
 
   if ((interface == 0U) && (oper_mode == OPER_MODE_STATION)) {
-    if (qcom_set_connect_callback(0U, &ConnectCallback) != A_OK) {
+    if (qcom_set_connect_callback(0U, (void *)&ConnectCallback) != A_OK) {
       ret = ARM_DRIVER_ERROR;
     }
 
@@ -1685,7 +1693,7 @@ static int32_t WiFi_SocketCreate (int32_t af, int32_t type, int32_t protocol) {
     handle = qcom_socket(q_family, q_type, 0);
     if (handle != 0) {
       socket_arr[i].handle       = handle;
-      socket_arr[i].type         = type;
+      socket_arr[i].type         = (uint8_t)type;
       socket_arr[i].ip_len       = ((af == ARM_SOCKET_AF_INET6) ? 16U : 4U);
       socket_arr[i].non_blocking = 0U;
       socket_arr[i].recv_timeout = 20000U;
@@ -1755,7 +1763,7 @@ static int32_t WiFi_SocketBind (int32_t socket, const uint8_t *ip, uint32_t ip_l
     addr.addr6.sin6_family   = ATH_AF_INET6;
     addr.addr6.sin6_port     = port;
     addr.addr6.sin6_flowinfo = 0U;
-    memcpy((void *)&(addr.addr6.sin6_addr), (void *)ip, ip_len);
+    memcpy((void *)&(addr.addr6.sin6_addr), (void *)(int32_t)ip, ip_len);
     addr.addr6.sin6_scope_id = 0U;
     addr_len                 = sizeof(SOCKADDR_6_T);
   }
@@ -1764,7 +1772,7 @@ static int32_t WiFi_SocketBind (int32_t socket, const uint8_t *ip, uint32_t ip_l
   if (ret == 0) {
     // If socket bind succeeded
     socket_arr[socket].local_port = port;
-    memcpy((void *)socket_arr[socket].local_ip, (void *)ip, ip_len);
+    memcpy((void *)socket_arr[socket].local_ip, (void *)(int32_t)ip, ip_len);
   } else {
     ret = ARM_SOCKET_ERROR;
   }
@@ -1970,14 +1978,14 @@ static int32_t WiFi_SocketConnect (int32_t socket, const uint8_t *ip, uint32_t i
     addr.addr6.sin6_family   = ATH_AF_INET6;
     addr.addr6.sin6_port     = port;
     addr.addr6.sin6_flowinfo = 0U;
-    memcpy((void *)&(addr.addr6.sin6_addr), (void *)ip, ip_len);
+    memcpy((void *)&(addr.addr6.sin6_addr), (void *)(int32_t)ip, ip_len);
     addr.addr6.sin6_scope_id = 0U;
     addr_len                 = sizeof(SOCKADDR_6_T);
   }
 
   if (socket_arr[socket].type == ARM_SOCKET_SOCK_STREAM) {
     // Call qcom_connect only for stream (TCP) socket
-    ret = qcom_connect(socket_arr[socket].handle, (struct sockaddr *)&addr, addr_len);
+    ret = qcom_connect(socket_arr[socket].handle, (struct sockaddr *)(int32_t)&addr, addr_len);
   }
 
   if (ret == 0) {
@@ -2071,6 +2079,7 @@ static int32_t WiFi_SocketRecvFrom (int32_t socket, void *buf, uint32_t len, uin
   }
 
   ret = 0;
+  from_addr_len = 0;
 
   timeout = socket_arr[socket].recv_timeout;
   if (socket_arr[socket].non_blocking != 0U) {
@@ -2085,12 +2094,12 @@ static int32_t WiFi_SocketRecvFrom (int32_t socket, void *buf, uint32_t len, uin
     if ((A_STATUS)ret == A_OK) {
       rx_buf = NULL;
       if (ip != NULL) {
-        ret  = qcom_recvfrom(socket_arr[socket].handle, &rx_buf, len_to_recv - len_recv, 0, (struct sockaddr *)&from_addr, &from_addr_len);
+        ret  = qcom_recvfrom(socket_arr[socket].handle, &rx_buf, len_to_recv - len_recv, 0, (struct sockaddr *)(int32_t)&from_addr, &from_addr_len);
       } else {
         ret  = qcom_recv    (socket_arr[socket].handle, &rx_buf, len_to_recv - len_recv, 0);
       }
       if (ret > 0) {
-        memcpy((void *)((char *)buf + len_recv), (void *)rx_buf, ret);
+        memcpy((void *)((char *)buf + len_recv), (void *)rx_buf, (uint32_t)ret);
         len_recv += ret;
         if (from_addr_len == sizeof(SOCKADDR_T)) {
           if (ip != NULL) {
@@ -2180,7 +2189,7 @@ static int32_t WiFi_SocketSend (int32_t socket, const void *buf, uint32_t len) {
     ip_udp_len = socket_arr[socket].ip_len;
     udp_port   = socket_arr[socket].remote_port;
     if (socket_arr[socket].ip_len == 4) {
-      u32    = *((uint32_t *)socket_arr[socket].remote_ip);
+      u32    = *((uint32_t *)(int32_t)socket_arr[socket].remote_ip);
       __UNALIGNED_UINT32_WRITE(ip_udp, A_CPU2BE32(u32));
     } else {
       memcpy((void *)ip_udp, (void *)socket_arr[socket].remote_ip, ip_udp_len);
@@ -2255,7 +2264,7 @@ static int32_t WiFi_SocketSendTo (int32_t socket, const void *buf, uint32_t len,
     } else {
       to_addr.addr6.sin6_family = ATH_AF_INET6;
       to_addr.addr6.sin6_port   = port;
-      memcpy((void *)&to_addr.addr6.sin6_addr, (void *)ip, ip_len);
+      memcpy((void *)&to_addr.addr6.sin6_addr, (void *)(int32_t)ip, ip_len);
       to_addr_len               = sizeof(SOCKADDR_6_T);
     }
   }
@@ -2275,7 +2284,7 @@ static int32_t WiFi_SocketSendTo (int32_t socket, const void *buf, uint32_t len,
         ret = qcom_send  (socket_arr[socket].handle, tx_buf, (int32_t)len_curr, 0);
       }
       if (ret > 0) {
-        len_sent += ret;
+        len_sent += (uint32_t)ret;
       } else if (ret < 0) {
         // If error
         ret = ARM_SOCKET_ERROR;
@@ -2290,7 +2299,7 @@ static int32_t WiFi_SocketSendTo (int32_t socket, const void *buf, uint32_t len,
   }
 
   if (ret > 0) {
-    ret = len_sent;
+    ret = (int32_t)len_sent;
   }
 
   return ret;
@@ -2397,7 +2406,7 @@ static int32_t WiFi_SocketGetPeerName (int32_t socket, uint8_t *ip, uint32_t *ip
   // Get remote host IP
   if (ip != NULL) {
     if (socket_arr[socket].ip_len == 4U) {
-      u32 = *((uint32_t *)socket_arr[socket].remote_ip);
+      u32 = *((uint32_t *)(int32_t)(socket_arr[socket].remote_ip));
       __UNALIGNED_UINT32_WRITE(ip, A_CPU2BE32(u32));
     } else {
       memcpy((void *)ip, (void *)socket_arr[socket].remote_ip, *ip_len);
@@ -2501,7 +2510,11 @@ static int32_t WiFi_SocketSetOpt (int32_t socket, int32_t opt_id, const void *op
   u32 = __UNALIGNED_UINT32_READ(opt_val);
   switch (opt_id) {
     case ARM_SOCKET_IO_FIONBIO:
-      socket_arr[socket].non_blocking = u32;
+      if (u32 != 0) {
+        socket_arr[socket].non_blocking = 1U;
+      } else {
+        socket_arr[socket].non_blocking = 0U;
+      }
       break;
     case ARM_SOCKET_SO_RCVTIMEO:
       socket_arr[socket].recv_timeout = u32;
@@ -2592,7 +2605,7 @@ static int32_t WiFi_SocketGetHostByName (const char *name, int32_t af, uint8_t *
   qcom_dns_server_address_get(dns_servers, &dns_servers_num);
 
   dns_ip.sin_addr = A_CPU2BE32(dns_servers[0]);
-  if (qcom_dns_resolver(dns_ip, (char *)name, &ip_addr, WIFI_QCA400x_DNS_RESOLVE_TIMEOUT) == A_OK) {
+  if (qcom_dns_resolver(dns_ip, (char *)(int32_t)name, &ip_addr, WIFI_QCA400x_DNS_RESOLVE_TIMEOUT) == A_OK) {
     *ip_len = 4U;
     __UNALIGNED_UINT32_WRITE(ip, ip_addr.sin_addr);
   } else {
@@ -2633,7 +2646,7 @@ static int32_t WiFi_Ping (const uint8_t *ip, uint32_t ip_len) {
       }
       break;
     case 16:
-      if (qcom_ping6((QOSAL_UINT8 *)ip, 1U) != A_OK) {
+      if (qcom_ping6((QOSAL_UINT8 *)(int32_t)ip, 1U) != A_OK) {
         ret = ARM_DRIVER_ERROR;
       }
       break;
