@@ -32,16 +32,23 @@
  * QCA400x_HW.c file and should be adapted according to hardware).
  *
  * Known limitations:
- * - SocketRecv, SocketRecvFrom, SocketSend and SocketSendTo cannot detect 
- *   connection closure by peer as t_select function does not return that 
- *   status
  * - GetModuleInfo is not supported as QCOM API does not support retrieval 
  *   of this information
+ * - Access Point mode is implemented but disabled in capabilities due to 
+ *   inability to stop AP through QCOM API
+ * - SetOption does not support the following options: ARM_WIFI_BSSID,
+ *   ARM_WIFI_MAC, ARM_WIFI_IP6_GLOBAL, ARM_WIFI_IP6_LINK_LOCAL, 
+ *   ARM_WIFI_IP6_SUBNET_PREFIX_LEN, ARM_WIFI_IP6_GATEWAY.
+ * - GetOption does not support the following options: ARM_WIFI_TX_POWER,
+ *   ARM_WIFI_DTIM, ARM_WIFI_BEACON.
+ * - SocketGetSockName does not support getting a local port for
+ *   unbounded sockets
+ * - SocketGetOpt and SocketSetOpt do not support the following options:
+ *   ARM_SOCKET_SO_SNDTIMEO and ARM_SOCKET_SO_KEEPALIVE
  * - SocketGetHostByName supports only IPv4 addresses as QCOM API 
  *   (qcom_dnsc_get_host_by_name, qcom_dnsc_get_host_by_name2) does 
  *   not support long host names and qcom_dns_resolver only supports IPv4
- * - Access Point mode is implemented but disabled in capabilities due to 
- *   inability to stop AP through QCOM API
+ * - UDP sockets are unreliable
  * -------------------------------------------------------------------------- */
 
 /* History:
