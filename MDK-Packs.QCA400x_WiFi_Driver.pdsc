@@ -7,6 +7,15 @@
   <url>https://github.com/MDK-Packs/Pack/raw/master/QCA400x_WiFi_Driver/</url>
   <license>LICENSE.txt</license>
   <releases>
+    <release version="1.0.1-dev1">
+      - Updated Driver:
+      -- Corrected ARM Compiler 6 warnings
+      -- Corrected Socket Accept
+      -- Corrected Socket GetHostByName: Returned correct ip address length
+      -- Corrected Socket SocketSendTo: Corrected transfers greater than WIFI_QCA400x_MAX_PACKET_LEN
+      -- Updated Socket RecvFrom: Handled situation when socket was closed by a peer
+      -- Updated Socket Close: Cleared whole socket_t structure
+    </release>
     <release version="1.0.1-dev0">
       - Updated Driver:
       -- Removed send_timeout variable (socket send timeout can not be configured)
@@ -34,7 +43,7 @@
     </condition>
   </conditions>
   <components>
-    <component Cclass="CMSIS Driver" Cgroup="WiFi" Csub="QCA400x" Capiversion="1.0.0" Cversion="1.0.1-dev0" condition="QCA400x WiFi Driver">
+    <component Cclass="CMSIS Driver" Cgroup="WiFi" Csub="QCA400x" Capiversion="1.0.0" Cversion="1.2.0" condition="QCA400x WiFi Driver">
       <description>WiFi Qualcomm QCA400x Driver</description>
       <RTE_Components_h>
         <!-- the following content goes into file 'RTE_Components.h' -->
