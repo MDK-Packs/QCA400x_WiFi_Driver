@@ -53,7 +53,7 @@
 
 /* History:
  *  Version 1.2
- *  - Corrected ARM Compiler 6 warnings
+ *  - Resolved ARM Compiler 6 warnings
  *  - Socket functionality:
  *  -- Corrected Socket Accept
  *  -- Corrected Socket GetHostByName: Returned correct ip address length
